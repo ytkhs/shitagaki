@@ -10,7 +10,8 @@
 - 行番号なし、折り返しあり
 - コピーすると書式のないプレーンテキストだけがクリップボードに入る
 - ウィンドウの大きさと位置を覚えておき、次の起動で同じ状態で開く
-- 最後のウィンドウを閉じるとアプリも終了する
+- 最後のウィンドウを閉じるとアプリも終了する。保存待ちの入力も終了時に書き出す
+- 二重には起動しない。2 回目に起動すると、開いているウィンドウが前に出る
 
 下のバーに次のものが並びます。
 
@@ -23,10 +24,11 @@
 
 ### ショートカット
 
-Windows では ⌘ を Ctrl に読み替えてください。
+Windows では ⌘ を Ctrl に読み替えてください。⌃⌥S は他のアプリがすでに使っていると効きません。
 
 | キー | 動作 |
 |---|---|
+| ⌃⌥S | どのアプリを使っていても shitagaki を前に出す（Windows は Ctrl+Alt+S） |
 | ⌘⇧C | 本文をすべてコピー |
 | ⌘+ / ⌘- | 文字を大きく / 小さく（10〜28px） |
 | ⌘0 | 文字の大きさを元に戻す（14px） |
@@ -64,6 +66,8 @@ Windows では ⌘ を Ctrl に読み替えてください。
 - [Tauri v2](https://v2.tauri.app/)（Rust）: ウィンドウと本文・テーマの読み書き
   - [window-state](https://v2.tauri.app/plugin/window-state/): ウィンドウの大きさと位置の保存
   - [clipboard-manager](https://v2.tauri.app/plugin/clipboard/): 全文コピー
+  - [single-instance](https://v2.tauri.app/plugin/single-instance/): 二重起動の防止
+  - [global-shortcut](https://v2.tauri.app/plugin/global-shortcut/): ⌃⌥S での呼び出し
 - [CodeMirror 6](https://codemirror.net/): エディタ部分
 - Vite + TypeScript
 
