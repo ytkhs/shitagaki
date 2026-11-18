@@ -18,6 +18,18 @@
 ~/Library/Application Support/com.ytkhs.shitagaki/draft.txt
 ```
 
+## ダウンロード
+
+[Releases](https://github.com/ytkhs/shitagaki/releases) から取れます。
+
+- Windows: `shitagaki_<version>_x64-setup.exe`
+- Mac（Apple Silicon）: `shitagaki_<version>_aarch64.dmg`
+
+署名していないので、初回起動時に止められます。
+
+- Windows: SmartScreen の警告で「詳細情報」→「実行」
+- Mac: `/Applications` にコピーしたあと、ターミナルで `xattr -cr /Applications/shitagaki.app` を実行
+
 ## 構成
 
 - [Tauri v2](https://v2.tauri.app/)（Rust）: ウィンドウと本文の読み書き
@@ -55,6 +67,15 @@ cp -R src-tauri/target/release/bundle/macos/shitagaki.app \
 ```
 
 署名と公証はしていません。自分の Mac でビルドしたものはそのまま起動できますが、`.dmg` を他の Mac に持っていくと Gatekeeper に止められます。
+
+## リリース
+
+`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` のバージョンを上げてコミットし、同じ番号のタグを push します。GitHub Actions が Windows と Mac 向けにビルドし、下書きのリリースを作ります。
+
+```
+git tag v0.1.0
+git push origin v0.1.0
+```
 
 ## アイコンの作り直し
 

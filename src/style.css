@@ -20,5 +20,5 @@ body {
 }
 #editor .cm-editor { height: 100%; font-size: 14px; }
 #editor .cm-editor.cm-focused { outline: none; }
-#editor .cm-content { font-family: Menlo, "Hiragino Sans", monospace; padding: 8px 0; }
+#editor .cm-content { font-family: Menlo, Consolas, "Hiragino Sans", "Yu Gothic", monospace; padding: 8px 0; }
 #editor .cm-line { padding: 0 14px; }
