@@ -10,16 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "shitagaki",
-        "width": 520,
-        "height": 640,
-        "minWidth": 280,
-        "minHeight": 200,
-        "theme": "Dark"
-      }
-    ],
+    "windows": [],
     "security": { "csp": null }
   },
   "bundle": {

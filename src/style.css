@@ -1,7 +1,23 @@
 :root {
   --bg: #1e1f22;
   --fg: #d8d8d8;
+  --bar-fg: #8a8d93;
+  --bar-border: #2c2e33;
+  --bar-hover: #2a2c31;
+  --bar-active: #e8eaee;
+  --bar-active-bg: #34405a;
+  --editor-font-size: 14px;
   color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #fbfbf9;
+  --fg: #2a2a2a;
+  --bar-fg: #75777c;
+  --bar-border: #e4e4e0;
+  --bar-hover: #ececea;
+  --bar-active: #1d3d7a;
+  --bar-active-bg: #d6e2f7;
+  color-scheme: light;
 }
 html, body {
   margin: 0;
@@ -18,7 +34,32 @@ body {
   flex: 1;
   min-height: 0;
 }
-#editor .cm-editor { height: 100%; font-size: 14px; }
+#editor .cm-editor { height: 100%; font-size: var(--editor-font-size); }
 #editor .cm-editor.cm-focused { outline: none; }
 #editor .cm-content { font-family: Menlo, Consolas, "Hiragino Sans", "Yu Gothic", monospace; padding: 8px 0; }
 #editor .cm-line { padding: 0 14px; }
+#statusbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 14px;
+  border-top: 1px solid var(--bar-border);
+}
+#statusbar > * {
+  white-space: nowrap;
+}
+#spacer { flex: 1; }
+#char-count, #notice, #saved-at, #statusbar button {
+  font: 11px -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  color: var(--bar-fg);
+}
+#statusbar button {
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+#statusbar button:hover { background: var(--bar-hover); }
+#pin-toggle.active { color: var(--bar-active); background: var(--bar-active-bg); }
+#notice { margin-left: 8px; }

@@ -7,16 +7,45 @@
 ## 機能
 
 - 入力が止まって 0.5 秒後に自動保存し、次に起動すると前回の本文が戻る
-- タイトルバーに最終保存時刻を表示する
 - 行番号なし、折り返しあり
 - コピーすると書式のないプレーンテキストだけがクリップボードに入る
-- ダークテーマ
+- ウィンドウの大きさと位置を覚えておき、次の起動で同じ状態で開く
+- 最後のウィンドウを閉じるとアプリも終了する
 
-本文は次のファイルに保存されます。中身はただのテキストです。
+下のバーに次のものが並びます。
 
-```
-~/Library/Application Support/com.ytkhs.shitagaki/draft.txt
-```
+| 場所 | 内容 |
+|---|---|
+| 左 | 文字数（改行は数えない。絵文字や結合文字は 1 字） |
+| 右 | 最終保存時刻、最前面表示のオン・オフ、ダーク・ライトの切り替え |
+
+ボタンには今の状態が出ます。押しても入力位置は本文に残るので、そのまま書き続けられます。
+
+### ショートカット
+
+Windows では ⌘ を Ctrl に読み替えてください。
+
+| キー | 動作 |
+|---|---|
+| ⌘⇧C | 本文をすべてコピー |
+| ⌘+ / ⌘- | 文字を大きく / 小さく（10〜28px） |
+| ⌘0 | 文字の大きさを元に戻す（14px） |
+| ⌘Z / ⌘⇧Z | 元に戻す / やり直す |
+
+### 保存されるもの
+
+本文などは次のフォルダに置かれます。中身はただのテキストと JSON です。
+
+- Mac: `~/Library/Application Support/com.ytkhs.shitagaki/`
+- Windows: `%APPDATA%\com.ytkhs.shitagaki\`
+
+| ファイル | 内容 |
+|---|---|
+| `draft.txt` | 本文 |
+| `theme.txt` | ダーク・ライトの選択 |
+| `.window-state.json` | ウィンドウの大きさと位置 |
+
+文字の大きさと最前面表示の設定は、アプリ内の webview の保存領域に入ります。
 
 ## ダウンロード
 
@@ -32,16 +61,20 @@
 
 ## 構成
 
-- [Tauri v2](https://v2.tauri.app/)（Rust）: ウィンドウと本文の読み書き
+- [Tauri v2](https://v2.tauri.app/)（Rust）: ウィンドウと本文・テーマの読み書き
+  - [window-state](https://v2.tauri.app/plugin/window-state/): ウィンドウの大きさと位置の保存
+  - [clipboard-manager](https://v2.tauri.app/plugin/clipboard/): 全文コピー
 - [CodeMirror 6](https://codemirror.net/): エディタ部分
 - Vite + TypeScript
 
 | パス | 内容 |
 |---|---|
-| `src/main.ts` | エディタの初期化、自動保存、タイトルの更新 |
-| `src/style.css` | 見た目 |
-| `src-tauri/src/lib.rs` | `load_draft` / `save_draft` コマンド |
-| `src-tauri/tauri.conf.json` | ウィンドウとバンドルの設定 |
+| `index.html` | エディタと下のバーの枠 |
+| `src/main.ts` | エディタの初期化、自動保存、下のバー、ショートカット |
+| `src/style.css` | 見た目（ダーク・ライトの配色） |
+| `src-tauri/src/lib.rs` | ウィンドウの作成、`load_draft` / `save_draft` / `get_theme` / `save_theme` コマンド |
+| `src-tauri/tauri.conf.json` | バンドルの設定（ウィンドウは `lib.rs` で作る） |
+| `src-tauri/capabilities/default.json` | フロントから呼べる権限 |
 | `assets/icon.swift` | アプリアイコンを描くスクリプト |
 
 ## 開発
