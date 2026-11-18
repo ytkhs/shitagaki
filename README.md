@@ -73,7 +73,7 @@ cp -R src-tauri/target/release/bundle/macos/shitagaki.app \
 `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` のバージョンを上げてコミットし、同じ番号のタグを push します。GitHub Actions が Windows と Mac 向けにビルドし、下書きのリリースを作ります。
 
 ```
-git tag v0.1.0
+git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
 ```
 
