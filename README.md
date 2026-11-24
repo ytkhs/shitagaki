@@ -56,10 +56,10 @@ Windows では ⌘ を Ctrl に読み替えてください。⌃⌥S は他の�
 - Windows: `shitagaki_<version>_x64-setup.exe`
 - Mac（Apple Silicon）: `shitagaki_<version>_aarch64.dmg`
 
-署名していないので、初回起動時に止められます。
+Developer ID による署名と公証はしていないため（Mac 版は ad-hoc 署名のみ）、初回起動時に止められます。
 
 - Windows: SmartScreen の警告で「詳細情報」→「実行」
-- Mac: `/Applications` にコピーしたあと、ターミナルで `xattr -cr /Applications/shitagaki.app` を実行
+- Mac: `/Applications` にコピーして開いたあと、システム設定の「プライバシーとセキュリティ」から「このまま開く」（開けない場合はターミナルで `xattr -cr /Applications/shitagaki.app` を実行）
 
 ## 構成
 
@@ -76,7 +76,7 @@ Windows では ⌘ を Ctrl に読み替えてください。⌃⌥S は他の�
 | `index.html` | エディタと下のバーの枠 |
 | `src/main.ts` | エディタの初期化、自動保存、下のバー、ショートカット |
 | `src/style.css` | 見た目（ダーク・ライトの配色） |
-| `src-tauri/src/lib.rs` | ウィンドウの作成、`load_draft` / `save_draft` / `get_theme` / `save_theme` コマンド |
+| `src-tauri/src/lib.rs` | ウィンドウの作成、`load_draft` / `stage_draft` / `save_draft` / `get_theme` / `save_theme` コマンド |
 | `src-tauri/tauri.conf.json` | バンドルの設定（ウィンドウは `lib.rs` で作る） |
 | `src-tauri/capabilities/default.json` | フロントから呼べる権限 |
 | `assets/icon.swift` | アプリアイコンを描くスクリプト |
@@ -103,7 +103,7 @@ cp -R src-tauri/target/release/bundle/macos/shitagaki.app \
   /Applications/
 ```
 
-署名と公証はしていません。自分の Mac でビルドしたものはそのまま起動できますが、`.dmg` を他の Mac に持っていくと Gatekeeper に止められます。
+Developer ID による署名と公証はしていません（Mac 版は ad-hoc 署名のみ）。自分の Mac でビルドしたものはそのまま起動できますが、`.dmg` を他の Mac に持っていくと Gatekeeper に止められます。
 
 ## リリース
 

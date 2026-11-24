@@ -11,7 +11,7 @@
   },
   "app": {
     "windows": [],
-    "security": { "csp": null }
+    "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'" }
   },
   "bundle": {
     "active": true,

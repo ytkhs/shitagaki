@@ -1,6 +1,6 @@
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, drawSelection } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, redo } from "@codemirror/commands";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -72,20 +72,7 @@ function showNotice(text: string) {
 // --- テーマ ---
 type Mode = "dark" | "light";
 const themeSlot = new Compartment();
-// テーマは起動時に Rust 側がウィンドウを作る前に読むので、localStorage ではなくアプリのデータフォルダに置く
-let mode: Mode = await invoke<Mode>("get_theme");
-// 以前の版は localStorage に保存していたので、残っていれば一度だけ引き継ぐ
 const LEGACY_THEME_KEY = "shitagaki.theme";
-const legacyMode = loadSetting(LEGACY_THEME_KEY);
-if (legacyMode === "light" || legacyMode === "dark") {
-  mode = legacyMode;
-  await invoke("save_theme", { theme: mode }).catch(console.error);
-  try {
-    localStorage.removeItem(LEGACY_THEME_KEY);
-  } catch {
-    // 消せなくても毎回同じ値で上書きするだけなので害はない
-  }
-}
 
 function applyMode(m: Mode): Promise<unknown> {
   document.documentElement.dataset.theme = m;
@@ -117,12 +104,6 @@ function applyPinned(on: boolean) {
   appWindow.setAlwaysOnTop(on).catch(console.error);
 }
 
-applyFontSize(fontSize);
-applyPinned(pinned);
-// 起動時に既定のダークが一瞬見えないよう、ウィンドウは隠した状態で作り、下地の色まで揃えてから出す
-await applyMode(mode);
-appWindow.show().catch(console.error);
-
 // --- 保存 ---
 type Draft = { text: string; saved_at: number | null };
 
@@ -137,9 +118,6 @@ function showSavedAt(savedAt: number | null) {
   savedAtLabel.textContent = savedAt === null ? "" : `${timeFormat.format(savedAt)} 保存`;
 }
 
-const draft = await invoke<Draft>("load_draft");
-showSavedAt(draft.saved_at);
-
 // 本文は変更のたびに Rust 側へ渡しておき、ファイルへの書き込みだけ入力が止まるまで待つ。
 // こうしておけば待っている間に終了しても、Rust 側が終了時に書き出せる
 let saveTimer: number | undefined;
@@ -149,7 +127,10 @@ function scheduleSave(text: string) {
   saveTimer = window.setTimeout(() => {
     invoke<number | null>("save_draft")
       .then((savedAt) => savedAt !== null && showSavedAt(savedAt))
-      .catch(console.error);
+      .catch((e) => {
+        console.error(e);
+        showNotice("保存に失敗しました");
+      });
   }, SAVE_DELAY_MS);
 }
 
@@ -166,12 +147,16 @@ function countChars(text: string): number {
   return n;
 }
 
-function showCharCount(state: EditorState) {
-  const total = numberFormat.format(countChars(state.doc.toString()));
+let totalCharsText = "0";
+
+function updateCharCount(state: EditorState, docChanged: boolean) {
+  if (docChanged) {
+    totalCharsText = numberFormat.format(countChars(state.doc.toString()));
+  }
   const selected = state.selection.ranges
     .filter((r) => !r.empty)
     .reduce((sum, r) => sum + countChars(state.sliceDoc(r.from, r.to)), 0);
-  charCount.textContent = selected > 0 ? `${numberFormat.format(selected)} / ${total} 字` : `${total} 字`;
+  charCount.textContent = selected > 0 ? `${numberFormat.format(selected)} / ${totalCharsText} 字` : `${totalCharsText} 字`;
 }
 
 // --- エディタ ---
@@ -185,65 +170,119 @@ function copyAll(view: EditorView): boolean {
   return true;
 }
 
-const view = new EditorView({
-  parent: el("editor"),
-  state: EditorState.create({
-    doc: draft.text,
-    extensions: [
-      themeSlot.of(mode === "dark" ? darkTheme : lightTheme),
-      history(),
-      drawSelection(),
-      EditorView.lineWrapping,
-      keymap.of([{ key: "Mod-Shift-c", run: copyAll }, ...defaultKeymap, ...historyKeymap]),
-      EditorView.updateListener.of((u) => {
-        if (u.docChanged) scheduleSave(u.state.doc.toString());
-        if (u.docChanged || u.selectionSet) showCharCount(u.state);
-      }),
-    ],
-  }),
-});
+// 起動時の読み込みで例外が起きても非表示のまま残らないよう、最後に必ずウィンドウを表示する
+try {
+  // テーマは起動時に Rust 側がウィンドウを作る前に読むので、localStorage ではなくアプリのデータフォルダに置く
+  let mode: Mode = "dark";
+  try {
+    mode = await invoke<Mode>("get_theme");
+  } catch (e) {
+    console.error(e);
+  }
+  // 以前の版は localStorage に保存していたので、残っていれば一度だけ引き継ぐ
+  const legacyMode = loadSetting(LEGACY_THEME_KEY);
+  if (legacyMode === "light" || legacyMode === "dark") {
+    mode = legacyMode;
+    await invoke("save_theme", { theme: mode }).catch(console.error);
+    try {
+      localStorage.removeItem(LEGACY_THEME_KEY);
+    } catch {
+      // 消せなくても毎回同じ値で上書きするだけなので害はない
+    }
+  }
 
-showCharCount(view.state);
-
-// ⌘+ は JIS 配列だと Shift 付きの ⌘; になるなど配列で key が揺れるので、CodeMirror の keymap ではなく key の文字で判定する
-const isMac = navigator.platform.startsWith("Mac");
-document.addEventListener(
-  "keydown",
-  (e) => {
-    if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey) return;
-    let next: number;
-    if (e.key === "+" || e.key === "=" || e.key === ";") next = fontSize + 1;
-    else if (e.key === "-") next = fontSize - 1;
-    else if (e.key === "0") next = FONT_SIZE_DEFAULT;
-    else return;
-    e.preventDefault();
-    e.stopPropagation();
-    applyFontSize(next);
-    storeSetting(FONT_SIZE_KEY, String(fontSize));
-    view.requestMeasure();
-    showNotice(`文字サイズ ${fontSize}px`);
-  },
-  true,
-);
-
-// ボタンにフォーカスが移ると入力を続けられないので、押してもカーソルは本文に残す
-for (const button of [pinToggle, themeToggle]) {
-  button.addEventListener("mousedown", (e) => e.preventDefault());
-}
-
-themeToggle.addEventListener("click", () => {
-  mode = mode === "dark" ? "light" : "dark";
-  applyMode(mode);
-  invoke("save_theme", { theme: mode }).catch(console.error);
-  view.dispatch({ effects: themeSlot.reconfigure(mode === "dark" ? darkTheme : lightTheme) });
-  view.focus();
-});
-
-pinToggle.addEventListener("click", () => {
-  pinned = !pinned;
+  applyFontSize(fontSize);
   applyPinned(pinned);
-  storeSetting(PIN_KEY, pinned ? "1" : "0");
-  view.focus();
-});
+  await applyMode(mode);
 
-view.focus();
+  let draft: Draft = { text: "", saved_at: null };
+  let loadFailed = false;
+  try {
+    draft = await invoke<Draft>("load_draft");
+  } catch (e) {
+    console.error(e);
+    loadFailed = true;
+  }
+  showSavedAt(draft.saved_at);
+
+  const view = new EditorView({
+    parent: el("editor"),
+    state: EditorState.create({
+      doc: draft.text,
+      extensions: [
+        themeSlot.of(mode === "dark" ? darkTheme : lightTheme),
+        history(),
+        drawSelection(),
+        EditorView.lineWrapping,
+        // @codemirror/commands の historyKeymap は Windows の Ctrl+Shift+Z を割り当てないので明示する
+        keymap.of([{ key: "Mod-Shift-z", run: redo, preventDefault: true }, ...defaultKeymap, ...historyKeymap]),
+        EditorView.updateListener.of((u) => {
+          if (u.docChanged) scheduleSave(u.state.doc.toString());
+          if (u.docChanged || u.selectionSet) updateCharCount(u.state, u.docChanged);
+        }),
+      ],
+    }),
+  });
+
+  updateCharCount(view.state, true);
+
+  // ⌘+ は JIS 配列だと Shift 付きの ⌘; になるなど配列で key が揺れるので、CodeMirror の keymap ではなく key の文字で判定する。
+  // 全文コピーもボタン等にフォーカスがあるときを含め常に効くよう document 側で拾う
+  const isMac = navigator.platform.startsWith("Mac");
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.isComposing) return;
+      const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+      if (!mod || e.altKey) return;
+      if (e.shiftKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        e.stopPropagation();
+        copyAll(view);
+        return;
+      }
+      let next: number;
+      if (e.key === "+" || e.key === "=" || e.key === ";") next = fontSize + 1;
+      else if (e.key === "-") next = fontSize - 1;
+      else if (e.key === "0") next = FONT_SIZE_DEFAULT;
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+      applyFontSize(next);
+      storeSetting(FONT_SIZE_KEY, String(fontSize));
+      view.requestMeasure();
+      showNotice(`文字サイズ ${fontSize}px`);
+    },
+    true,
+  );
+
+  // 他アプリから ⌃⌥S 等で戻ったときや、余白クリック後でもすぐ書けるようフォーカスを戻す
+  window.addEventListener("focus", () => view.focus());
+
+  // ボタンにフォーカスが移ると入力を続けられないので、押してもカーソルは本文に残す
+  for (const button of [pinToggle, themeToggle]) {
+    button.addEventListener("mousedown", (e) => e.preventDefault());
+  }
+
+  themeToggle.addEventListener("click", () => {
+    mode = mode === "dark" ? "light" : "dark";
+    applyMode(mode);
+    invoke("save_theme", { theme: mode }).catch(console.error);
+    view.dispatch({ effects: themeSlot.reconfigure(mode === "dark" ? darkTheme : lightTheme) });
+    view.focus();
+  });
+
+  pinToggle.addEventListener("click", () => {
+    pinned = !pinned;
+    applyPinned(pinned);
+    storeSetting(PIN_KEY, pinned ? "1" : "0");
+    view.focus();
+  });
+
+  if (loadFailed) {
+    showNotice("下書きの読み込みに失敗しました");
+  }
+  view.focus();
+} finally {
+  appWindow.show().catch(console.error);
+}

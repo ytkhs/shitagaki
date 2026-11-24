@@ -48,11 +48,22 @@ body {
 #statusbar > * {
   white-space: nowrap;
 }
-#spacer { flex: 1; }
+#spacer { flex: 1 1 0; }
 #char-count, #notice, #saved-at, #statusbar button {
   font: 11px -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
   color: var(--bar-fg);
 }
+#char-count, #statusbar button {
+  flex-shrink: 0;
+}
+#notice, #saved-at {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#notice { flex-shrink: 1; }
+#notice:not(:empty) { margin-left: 8px; }
+#saved-at { flex-shrink: 2; }
 #statusbar button {
   background: none;
   border: none;
@@ -62,4 +73,3 @@ body {
 }
 #statusbar button:hover { background: var(--bar-hover); }
 #pin-toggle.active { color: var(--bar-active); background: var(--bar-active-bg); }
-#notice { margin-left: 8px; }
