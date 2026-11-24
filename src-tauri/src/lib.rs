@@ -39,7 +39,7 @@ fn load_draft(app: AppHandle) -> Result<Draft, String> {
     match fs::read_to_string(&path) {
         Ok(text) => Ok(Draft {
             text,
-            saved_at: Some(modified_millis(&path)?),
+            saved_at: modified_millis(&path).ok(),
         }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Draft {
             text: String::new(),
@@ -54,23 +54,34 @@ fn load_draft(app: AppHandle) -> Result<Draft, String> {
 #[derive(Default)]
 struct PendingDraft(Mutex<Option<String>>);
 
-fn write_draft(app: &AppHandle, text: &str) -> Result<u64, String> {
-    let path = data_path(app, DRAFT_FILE)?;
+fn write_draft_to(path: &Path, text: &str) -> Result<u64, String> {
     // 直接上書きすると書き込み途中で落ちたときに本文が消えるので、一時ファイルに書いてから rename で置き換える
     let tmp = path.with_extension("txt.tmp");
     fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, &path).map_err(|e| e.to_string())?;
-    modified_millis(&path)
+    fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+    modified_millis(path)
+}
+
+fn flush_pending<F>(pending: &PendingDraft, write: F) -> Result<Option<u64>, String>
+where
+    F: FnOnce(&str) -> Result<u64, String>,
+{
+    let mut guard = pending.0.lock().map_err(|e| e.to_string())?;
+    let Some(text) = guard.as_deref() else {
+        return Ok(None);
+    };
+    let saved_at = write(text)?;
+    *guard = None;
+    Ok(Some(saved_at))
 }
 
 /// 書いていない本文があればファイルに書き、書いたときだけその保存時刻を返す
 fn flush_draft(app: &AppHandle) -> Result<Option<u64>, String> {
     let pending = app.state::<PendingDraft>();
-    let text = pending.0.lock().map_err(|e| e.to_string())?.take();
-    match text {
-        Some(text) => write_draft(app, &text).map(Some),
-        None => Ok(None),
-    }
+    flush_pending(&pending, |text| {
+        let path = data_path(app, DRAFT_FILE)?;
+        write_draft_to(&path, text)
+    })
 }
 
 #[tauri::command]
@@ -117,7 +128,7 @@ fn create_main_window(app: &AppHandle) -> tauri::Result<()> {
     WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("shitagaki")
         .inner_size(520.0, 640.0)
-        .min_inner_size(280.0, 200.0)
+        .min_inner_size(320.0, 200.0)
         .theme(Some(theme))
         .background_color(background)
         .visible(false)
@@ -138,7 +149,6 @@ fn summon_shortcut() -> Shortcut {
     Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyS)
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // 2 つ目のプロセスが同じ draft.txt に書くと互いの本文を上書きし合うので、起動済みならそちらを前に出して終わる
@@ -180,10 +190,80 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if let RunEvent::Exit = event {
-                if let Err(e) = flush_draft(app) {
-                    eprintln!("failed to save draft on exit: {e}");
-                }
+            if let RunEvent::Exit = event
+                && let Err(e) = flush_draft(app)
+            {
+                eprintln!("failed to save draft on exit: {e}");
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_DIR_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let seq = TEST_DIR_SEQ.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!(
+                "shitagaki-test-{}-{}",
+                std::process::id(),
+                seq
+            ));
+            fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn flush_pending_skips_when_empty() {
+        let pending = PendingDraft::default();
+        let mut called = false;
+        let res = flush_pending(&pending, |_| {
+            called = true;
+            Ok(123)
+        });
+        assert_eq!(res, Ok(None));
+        assert!(!called);
+    }
+
+    #[test]
+    fn flush_pending_retains_draft_on_error_and_clears_on_retry() {
+        let pending = PendingDraft(Mutex::new(Some("unsaved text".to_string())));
+
+        let err = flush_pending(&pending, |_| Err("disk busy".to_string()));
+        assert_eq!(err, Err("disk busy".to_string()));
+        assert_eq!(
+            pending.0.lock().unwrap().as_deref(),
+            Some("unsaved text")
+        );
+
+        let ok = flush_pending(&pending, |text| {
+            assert_eq!(text, "unsaved text");
+            Ok(456)
+        });
+        assert_eq!(ok, Ok(Some(456)));
+        assert_eq!(*pending.0.lock().unwrap(), None);
+    }
+
+    #[test]
+    fn write_draft_to_writes_file_without_leaving_tmp() {
+        let dir = TempDir::new();
+        let path = dir.0.join(DRAFT_FILE);
+        let saved_at = write_draft_to(&path, "hello\nworld").unwrap();
+        assert!(saved_at > 0);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "hello\nworld");
+        assert!(!path.with_extension("txt.tmp").exists());
+    }
 }
